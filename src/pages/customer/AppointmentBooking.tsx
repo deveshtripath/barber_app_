@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import Header from "@/components/customer/Header";
 import BottomNavigation from "@/components/customer/BottomNavigation";
@@ -15,12 +15,15 @@ import {
   Clock,
   DollarSign,
   Check,
+  AlertCircle,
 } from "lucide-react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 
 const AppointmentBooking = () => {
   const { user } = useAuth();
-  const { barbers, services, createAppointment } = useData();
+  const { barbers, services, createAppointment, getAvailableTimeSlots } =
+    useData();
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const barberId = searchParams.get("barber") || "";
@@ -35,27 +38,8 @@ const AppointmentBooking = () => {
     serviceId ? [serviceId] : [],
   );
   const [isLoading, setIsLoading] = useState(false);
-
-  // Available time slots
-  const timeSlots = [
-    "9:00 AM",
-    "9:30 AM",
-    "10:00 AM",
-    "10:30 AM",
-    "11:00 AM",
-    "11:30 AM",
-    "12:00 PM",
-    "12:30 PM",
-    "1:00 PM",
-    "1:30 PM",
-    "2:00 PM",
-    "2:30 PM",
-    "3:00 PM",
-    "3:30 PM",
-    "4:00 PM",
-    "4:30 PM",
-    "5:00 PM",
-  ];
+  const [error, setError] = useState<string | null>(null);
+  const [availableTimeSlots, setAvailableTimeSlots] = useState<string[]>([]);
 
   // Calculate total price
   const totalPrice = selectedServices.reduce((total, serviceId) => {
@@ -68,6 +52,21 @@ const AppointmentBooking = () => {
     const service = services.find((s) => s.id === serviceId);
     return total + (service?.duration || 0);
   }, 0);
+
+  // Update available time slots when date or barber changes
+  useEffect(() => {
+    if (selectedDate && selectedBarber) {
+      const slots = getAvailableTimeSlots(selectedBarber, selectedDate);
+      setAvailableTimeSlots(slots);
+
+      // Clear selected time if it's no longer available
+      if (selectedTime && !slots.includes(selectedTime)) {
+        setSelectedTime("");
+      }
+    } else {
+      setAvailableTimeSlots([]);
+    }
+  }, [selectedDate, selectedBarber, getAvailableTimeSlots]);
 
   const handleServiceToggle = (serviceId: string) => {
     setSelectedServices((prev) =>
@@ -85,9 +84,11 @@ const AppointmentBooking = () => {
       !selectedBarber ||
       selectedServices.length === 0
     ) {
+      setError("Please select all required fields");
       return;
     }
 
+    setError(null);
     setIsLoading(true);
     try {
       // Format date for display
@@ -106,8 +107,11 @@ const AppointmentBooking = () => {
 
       // Navigate to appointments page
       navigate("/customer/appointments");
-    } catch (error) {
+    } catch (error: any) {
       console.error("Error booking appointment:", error);
+      setError(
+        error.message || "Failed to book appointment. Please try again.",
+      );
     } finally {
       setIsLoading(false);
     }
@@ -120,6 +124,13 @@ const AppointmentBooking = () => {
       <main className="flex-1 pt-[60px] pb-[70px] overflow-y-auto">
         <div className="p-4">
           <h1 className="text-2xl font-bold mb-4">Book Appointment</h1>
+
+          {error && (
+            <Alert variant="destructive" className="mb-4">
+              <AlertCircle className="h-4 w-4" />
+              <AlertDescription>{error}</AlertDescription>
+            </Alert>
+          )}
 
           <Tabs defaultValue="services" className="mb-6">
             <TabsList className="w-full grid grid-cols-3">
@@ -183,38 +194,46 @@ const AppointmentBooking = () => {
                   <CardTitle className="text-lg">Select Barber</CardTitle>
                 </CardHeader>
                 <CardContent>
-                  <div className="space-y-3">
-                    {barbers.map((barber) => (
-                      <div
-                        key={barber.id}
-                        className={`p-3 border rounded-lg cursor-pointer transition-colors ${selectedBarber === barber.id ? "border-primary bg-primary/5" : "border-gray-200"}`}
-                        onClick={() => setSelectedBarber(barber.id)}
-                      >
-                        <div className="flex items-center space-x-3">
-                          <Avatar>
-                            <AvatarImage
-                              src={barber.imageUrl}
-                              alt={barber.name}
-                            />
-                            <AvatarFallback>
-                              {barber.name.substring(0, 2).toUpperCase()}
-                            </AvatarFallback>
-                          </Avatar>
-                          <div>
-                            <h3 className="font-medium">{barber.name}</h3>
-                            <p className="text-sm text-gray-500">
-                              {barber.specialty}
-                            </p>
-                            <div className="flex items-center mt-1">
-                              <Badge variant="outline" className="text-xs">
-                                {barber.availability}
-                              </Badge>
+                  {barbers.length > 0 ? (
+                    <div className="space-y-3">
+                      {barbers.map((barber) => (
+                        <div
+                          key={barber.id}
+                          className={`p-3 border rounded-lg cursor-pointer transition-colors ${selectedBarber === barber.id ? "border-primary bg-primary/5" : "border-gray-200"}`}
+                          onClick={() => setSelectedBarber(barber.id)}
+                        >
+                          <div className="flex items-center space-x-3">
+                            <Avatar>
+                              <AvatarImage
+                                src={barber.imageUrl}
+                                alt={barber.name}
+                              />
+                              <AvatarFallback>
+                                {barber.name.substring(0, 2).toUpperCase()}
+                              </AvatarFallback>
+                            </Avatar>
+                            <div>
+                              <h3 className="font-medium">{barber.name}</h3>
+                              <p className="text-sm text-gray-500">
+                                {barber.specialty}
+                              </p>
+                              <div className="flex items-center mt-1">
+                                <Badge variant="outline" className="text-xs">
+                                  {barber.availability}
+                                </Badge>
+                              </div>
                             </div>
                           </div>
                         </div>
-                      </div>
-                    ))}
-                  </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="p-4 text-center text-gray-500">
+                      <AlertCircle className="h-8 w-8 mx-auto mb-2 text-gray-400" />
+                      <p>No barbers are currently available.</p>
+                      <p className="text-sm mt-1">Please check back later.</p>
+                    </div>
+                  )}
                 </CardContent>
               </Card>
             </TabsContent>
@@ -247,20 +266,30 @@ const AppointmentBooking = () => {
                       <Clock className="h-4 w-4 mr-2 text-gray-500" />
                       <span className="font-medium">Time</span>
                     </div>
-                    <div className="grid grid-cols-3 gap-2">
-                      {timeSlots.map((time) => (
-                        <Button
-                          key={time}
-                          variant={
-                            selectedTime === time ? "default" : "outline"
-                          }
-                          className="text-sm"
-                          onClick={() => setSelectedTime(time)}
-                        >
-                          {time}
-                        </Button>
-                      ))}
-                    </div>
+                    {availableTimeSlots.length > 0 ? (
+                      <div className="grid grid-cols-3 gap-2">
+                        {availableTimeSlots.map((time) => (
+                          <Button
+                            key={time}
+                            variant={
+                              selectedTime === time ? "default" : "outline"
+                            }
+                            className="text-sm"
+                            onClick={() => setSelectedTime(time)}
+                          >
+                            {time}
+                          </Button>
+                        ))}
+                      </div>
+                    ) : (
+                      <div className="p-4 text-center text-gray-500 border border-gray-200 rounded-md">
+                        <Clock className="h-8 w-8 mx-auto mb-2 text-gray-400" />
+                        <p>No available time slots for this date.</p>
+                        <p className="text-sm mt-1">
+                          Please select another date or barber.
+                        </p>
+                      </div>
+                    )}
                   </div>
                 </CardContent>
               </Card>

@@ -110,17 +110,69 @@ serve(async (req) => {
       );
     }
 
+    // Get day of week (0 = Sunday, 1 = Monday, etc.)
+    const dayOfWeek = appointmentDateTime.getDay();
+
+    // Check if barber is available on this day
+    const { data: barberAvailability, error: availabilityError } =
+      await supabaseClient
+        .from("barber_availability")
+        .select("*")
+        .eq("barber_id", barber_id)
+        .eq("day_of_week", dayOfWeek);
+
+    if (availabilityError) {
+      return new Response(
+        JSON.stringify({ error: "Error checking barber availability" }),
+        {
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+          status: 500,
+        },
+      );
+    }
+
+    if (!barberAvailability || barberAvailability.length === 0) {
+      return new Response(
+        JSON.stringify({ error: "Barber is not available on this day" }),
+        {
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+          status: 400,
+        },
+      );
+    }
+
+    // Check if appointment time is within barber's available hours
+    const availability = barberAvailability[0];
+    const appointmentHours = appointmentDateTime.getHours();
+    const appointmentMinutes = appointmentDateTime.getMinutes();
+    const appointmentTimeString = `${appointmentHours.toString().padStart(2, "0")}:${appointmentMinutes.toString().padStart(2, "0")}`;
+
+    const startTime = availability.start_time;
+    const endTime = availability.end_time;
+
+    if (appointmentTimeString < startTime || appointmentTimeString >= endTime) {
+      return new Response(
+        JSON.stringify({
+          error: "Appointment time is outside barber's available hours",
+        }),
+        {
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+          status: 400,
+        },
+      );
+    }
+
     // Check for conflicting appointments
-    const startTime = new Date(appointmentDateTime.getTime() - 30 * 60000); // 30 minutes before
-    const endTime = new Date(appointmentDateTime.getTime() + 60 * 60000); // 60 minutes after
+    const startTimeDate = new Date(appointmentDateTime.getTime() - 30 * 60000); // 30 minutes before
+    const endTimeDate = new Date(appointmentDateTime.getTime() + 60 * 60000); // 60 minutes after
 
     const { data: conflictingAppointments, error: conflictError } =
       await supabaseClient
         .from("appointments")
         .select("id")
         .eq("barber_id", barber_id)
-        .gte("appointment_time", startTime.toISOString())
-        .lte("appointment_time", endTime.toISOString())
+        .gte("appointment_time", startTimeDate.toISOString())
+        .lte("appointment_time", endTimeDate.toISOString())
         .neq("status", "cancelled");
 
     if (conflictError) {

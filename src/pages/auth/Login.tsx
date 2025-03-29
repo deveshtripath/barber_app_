@@ -3,73 +3,56 @@ import { Link } from "react-router-dom";
 import { useAuth } from "@/lib/auth";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardFooter,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Scissors } from "lucide-react";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Scissors, Mail, Lock } from "lucide-react";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 
 const Login = () => {
   const { login } = useAuth();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [loading, setLoading] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [demoAccount, setDemoAccount] = useState<
-    "customer" | "barber" | "admin"
-  >("customer");
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
-    setLoading(true);
     setError(null);
+    setIsLoading(true);
 
     try {
       await login(email, password);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to login");
+    } catch (err: any) {
+      setError(
+        err.message || "Failed to login. Please check your credentials.",
+      );
     } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleDemoLogin = async () => {
-    setLoading(true);
-    setError(null);
-
-    try {
-      if (demoAccount === "customer") {
-        await login("customer@example.com", "password");
-      } else if (demoAccount === "barber") {
-        await login("barber@example.com", "password");
-      } else if (demoAccount === "admin") {
-        await login("admin@example.com", "password");
-      }
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to login");
-    } finally {
-      setLoading(false);
+      setIsLoading(false);
     }
   };
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-gray-50 p-4">
+    <div className="min-h-screen flex items-center justify-center bg-gray-50 p-4">
       <Card className="w-full max-w-md">
         <CardHeader className="text-center">
           <div className="flex justify-center mb-2">
-            <div className="rounded-full bg-primary/10 p-2">
-              <Scissors className="h-6 w-6 text-primary" />
+            <div className="rounded-full bg-gray-100 p-3">
+              <Scissors className="h-6 w-6 text-black" />
             </div>
           </div>
           <CardTitle className="text-2xl font-bold">CutQueue</CardTitle>
-          <CardDescription>Sign in to your account</CardDescription>
+          <div className="flex w-full mt-4">
+            <div className="w-1/2 border-b-2 border-black py-2 text-center font-medium">
+              Login
+            </div>
+            <Link
+              to="/register"
+              className="w-1/2 border-b-2 border-transparent py-2 text-center text-gray-500 hover:text-gray-700"
+            >
+              Register
+            </Link>
+          </div>
         </CardHeader>
         <CardContent>
           {error && (
@@ -78,101 +61,80 @@ const Login = () => {
             </Alert>
           )}
 
-          <Tabs defaultValue="credentials">
-            <TabsList className="grid w-full grid-cols-2 mb-4">
-              <TabsTrigger value="credentials">Credentials</TabsTrigger>
-              <TabsTrigger value="demo">Demo Accounts</TabsTrigger>
-            </TabsList>
-
-            <TabsContent value="credentials">
-              <form onSubmit={handleSubmit}>
-                <div className="space-y-4">
-                  <div className="space-y-2">
-                    <Label htmlFor="email">Email</Label>
-                    <Input
-                      id="email"
-                      type="email"
-                      placeholder="your@email.com"
-                      value={email}
-                      onChange={(e) => setEmail(e.target.value)}
-                      required
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <div className="flex items-center justify-between">
-                      <Label htmlFor="password">Password</Label>
-                      <Link
-                        to="/forgot-password"
-                        className="text-sm text-primary hover:underline"
-                      >
-                        Forgot password?
-                      </Link>
-                    </div>
-                    <Input
-                      id="password"
-                      type="password"
-                      placeholder="••••••••"
-                      value={password}
-                      onChange={(e) => setPassword(e.target.value)}
-                      required
-                    />
-                  </div>
-                  <Button type="submit" className="w-full" disabled={loading}>
-                    {loading ? "Signing in..." : "Sign In"}
-                  </Button>
-                </div>
-              </form>
-            </TabsContent>
-
-            <TabsContent value="demo">
-              <div className="space-y-4">
-                <div className="space-y-2">
-                  <Label>Select Demo Account</Label>
-                  <div className="grid grid-cols-3 gap-2">
-                    <Button
-                      variant={
-                        demoAccount === "customer" ? "default" : "outline"
-                      }
-                      onClick={() => setDemoAccount("customer")}
-                      className="w-full"
-                    >
-                      Customer
-                    </Button>
-                    <Button
-                      variant={demoAccount === "barber" ? "default" : "outline"}
-                      onClick={() => setDemoAccount("barber")}
-                      className="w-full"
-                    >
-                      Barber
-                    </Button>
-                    <Button
-                      variant={demoAccount === "admin" ? "default" : "outline"}
-                      onClick={() => setDemoAccount("admin")}
-                      className="w-full"
-                    >
-                      Admin
-                    </Button>
-                  </div>
-                </div>
-                <Button
-                  onClick={handleDemoLogin}
-                  className="w-full"
-                  disabled={loading}
-                >
-                  {loading ? "Signing in..." : `Sign In as ${demoAccount}`}
-                </Button>
+          <form onSubmit={handleLogin} className="space-y-4">
+            <div className="space-y-2">
+              <div className="relative">
+                <Mail className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-4 w-4" />
+                <Input
+                  type="email"
+                  placeholder="EMAIL"
+                  className="pl-10 bg-gray-100"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  required
+                />
               </div>
-            </TabsContent>
-          </Tabs>
-        </CardContent>
-        <CardFooter className="flex flex-col space-y-4">
-          <div className="text-center text-sm">
-            Don't have an account?{" "}
-            <Link to="/register" className="text-primary hover:underline">
-              Sign up
-            </Link>
+            </div>
+            <div className="space-y-2">
+              <div className="relative">
+                <Lock className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-4 w-4" />
+                <Input
+                  type="password"
+                  placeholder="••••••"
+                  className="pl-10 bg-gray-100"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  required
+                />
+              </div>
+            </div>
+
+            <div className="flex items-center justify-between">
+              <div className="flex items-center space-x-2">
+                <Checkbox id="remember" />
+                <Label htmlFor="remember" className="text-sm text-gray-600">
+                  Remember me
+                </Label>
+              </div>
+
+              <div className="text-sm">
+                <Link
+                  to="#"
+                  className="font-medium text-gray-700 hover:text-gray-900"
+                >
+                  Forgot password?
+                </Link>
+              </div>
+            </div>
+
+            <Button
+              type="submit"
+              className="w-full bg-gray-500 hover:bg-gray-600"
+              disabled={isLoading}
+            >
+              {isLoading ? "Logging in..." : "Login"}
+            </Button>
+          </form>
+
+          <div className="mt-6 text-center text-sm text-gray-600">
+            <p>
+              By continuing, you agree to our{" "}
+              <Link
+                to="#"
+                className="font-medium text-gray-900 hover:underline"
+              >
+                Terms of Service
+              </Link>{" "}
+              and{" "}
+              <Link
+                to="#"
+                className="font-medium text-gray-900 hover:underline"
+              >
+                Privacy Policy
+              </Link>
+            </p>
           </div>
-        </CardFooter>
+        </CardContent>
       </Card>
     </div>
   );

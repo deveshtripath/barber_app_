@@ -1,5 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import * as bcrypt from "https://deno.land/x/bcrypt@v0.4.1/mod.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -14,16 +15,58 @@ serve(async (req) => {
   }
 
   try {
-    const supabaseClient = createClient(
-      Deno.env.get("SUPABASE_URL") ?? "",
-      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "",
-      {
-        auth: {
-          autoRefreshToken: false,
-          persistSession: false,
+    console.log("Create user function called");
+
+    // Access environment variables from request headers
+    // Supabase Edge Functions receive environment variables in the Authorization header
+    const authHeader = req.headers.get("Authorization") || "";
+    const supabaseUrl = authHeader.includes("SUPABASE_URL=")
+      ? authHeader.split("SUPABASE_URL=")[1].split(" ")[0]
+      : Deno.env.get("SUPABASE_URL");
+
+    const supabaseServiceKey = authHeader.includes("SUPABASE_SERVICE_KEY=")
+      ? authHeader.split("SUPABASE_SERVICE_KEY=")[1].split(" ")[0]
+      : Deno.env.get("SUPABASE_SERVICE_KEY");
+
+    console.log("Environment check:", {
+      authHeaderExists: !!authHeader,
+      authHeaderLength: authHeader.length,
+      supabaseUrlExists: !!supabaseUrl,
+      supabaseServiceKeyExists: !!supabaseServiceKey,
+      supabaseUrlPartial: supabaseUrl
+        ? supabaseUrl.substring(0, 10) + "..."
+        : null,
+      supabaseKeyPartial: supabaseServiceKey
+        ? supabaseServiceKey.substring(0, 5) + "..."
+        : null,
+      envKeys: Object.keys(Deno.env.toObject()).filter((key) =>
+        key.includes("SUPABASE"),
+      ),
+    });
+
+    if (!supabaseUrl || !supabaseServiceKey) {
+      console.error("Missing Supabase credentials:", {
+        urlExists: !!supabaseUrl,
+        keyExists: !!supabaseServiceKey,
+      });
+      return new Response(
+        JSON.stringify({
+          error:
+            "Server configuration error: Supabase credentials not found. Please ensure SUPABASE_URL and SUPABASE_SERVICE_KEY are set in your environment.",
+        }),
+        {
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+          status: 500,
         },
+      );
+    }
+
+    const supabaseClient = createClient(supabaseUrl, supabaseServiceKey, {
+      auth: {
+        autoRefreshToken: false,
+        persistSession: false,
       },
-    );
+    });
 
     const { name, email, password, phone, role, profile_image } =
       await req.json();
@@ -52,12 +95,40 @@ serve(async (req) => {
       );
     }
 
+    // Check if email already exists
+    const { data: existingUser, error: existingUserError } =
+      await supabaseClient
+        .from("users")
+        .select("email")
+        .eq("email", email)
+        .single();
+
+    if (existingUser) {
+      return new Response(
+        JSON.stringify({
+          error: "Email already in use",
+        }),
+        {
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+          status: 400,
+        },
+      );
+    }
+
+    // Hash the password
+    const salt = await bcrypt.genSalt(10);
+    const hashedPassword = await bcrypt.hash(password, salt);
+
     // Create auth user
     const { data: authUser, error: authError } =
       await supabaseClient.auth.admin.createUser({
         email,
         password,
         email_confirm: true,
+        user_metadata: {
+          name,
+          role,
+        },
       });
 
     if (authError) {
@@ -76,6 +147,7 @@ serve(async (req) => {
         email,
         phone,
         role,
+        password_hash: hashedPassword,
         profile_image:
           profile_image ||
           `https://api.dicebear.com/7.x/avataaars/svg?seed=${name.toLowerCase().replace(/\s+/g, "")}`,
@@ -122,6 +194,7 @@ serve(async (req) => {
       },
     );
   } catch (error) {
+    console.error("Error in create-user function:", error);
     return new Response(JSON.stringify({ error: error.message }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
       status: 500,

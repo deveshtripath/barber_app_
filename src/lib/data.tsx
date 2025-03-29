@@ -18,6 +18,15 @@ export interface Barber {
   availability: string;
   phone: string;
   location: string;
+  availableTimes?: BarberAvailability[];
+}
+
+export interface BarberAvailability {
+  id: string;
+  barber_id: string;
+  day_of_week: number; // 0 = Sunday, 1 = Monday, etc.
+  start_time: string;
+  end_time: string;
 }
 
 export interface Service {
@@ -84,6 +93,11 @@ interface DataContextType {
   fetchBarbers: () => Promise<void>;
   fetchServices: () => Promise<void>;
   fetchAppointments: () => Promise<void>;
+  updateBarberAvailability: (
+    barberId: string,
+    availabilities: Omit<BarberAvailability, "id" | "barber_id">[],
+  ) => Promise<void>;
+  getAvailableTimeSlots: (barberId: string, date: Date) => string[];
 }
 
 // Create context with default values to prevent null/undefined errors
@@ -123,6 +137,8 @@ const DataContext = createContext<DataContextType>({
   fetchBarbers: async () => {},
   fetchServices: async () => {},
   fetchAppointments: async () => {},
+  updateBarberAvailability: async () => {},
+  getAvailableTimeSlots: () => [],
 });
 
 // Mock data for promotions and categories until we implement them in the database
@@ -198,33 +214,54 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({
       if (barberUsers) {
         // Get barber details
         const { data: barberDetails, error: detailsError } = await supabase
-          .from("barbers")
-          .select(
-            "id, shop_name, rating, services_offered, availability_status",
-          );
+          .from("barber_details")
+          .select("id, specialty, rating, location, availability_status");
 
         if (detailsError) throw detailsError;
+
+        // Get barber availability
+        const { data: barberAvailability, error: availabilityError } =
+          await supabase.from("barber_availability").select("*");
+
+        if (availabilityError) throw availabilityError;
 
         // Combine user profiles with barber details
         const combinedBarbers = barberUsers.map((barberUser) => {
           const details = barberDetails?.find(
             (detail) => detail.id === barberUser.id,
           );
+
+          const availability =
+            barberAvailability?.filter(
+              (avail) => avail.barber_id === barberUser.id,
+            ) || [];
+
           return {
             id: barberUser.id,
             name: barberUser.name,
             rating: details?.rating || 4.5,
-            specialty: details?.services_offered?.specialty || "Haircuts",
+            specialty: details?.specialty || "Haircuts",
             imageUrl:
               barberUser.profile_image ||
               `https://api.dicebear.com/7.x/avataaars/svg?seed=${barberUser.name.toLowerCase().replace(/\s+/g, "")}`,
-            availability: details?.availability_status ? "Today" : "Tomorrow",
+            availability: details?.availability_status
+              ? "Available"
+              : "Unavailable",
             phone: barberUser.phone || "+1 (555) 123-4567",
-            location: details?.shop_name || "Main Street Shop",
+            location: details?.location || "Main Street Shop",
+            availableTimes: availability,
           };
         });
 
-        setBarbers(combinedBarbers);
+        // Only show available barbers
+        const availableBarbers = combinedBarbers.filter(
+          (barber) =>
+            barber.availability === "Available" &&
+            barber.availableTimes &&
+            barber.availableTimes.length > 0,
+        );
+
+        setBarbers(availableBarbers);
       }
     } catch (error) {
       console.error("Error fetching barbers:", error);
@@ -409,8 +446,11 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({
               hour12: true,
             });
 
-            // Calculate price based on service type (simplified)
-            const price = 30; // Default price
+            // Get service details to calculate price
+            const service = services.find(
+              (s) => s.name === appointment.service_type,
+            );
+            const price = service?.price || 30; // Default price if service not found
 
             return {
               id: appointment.id,
@@ -435,6 +475,113 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({
     } catch (error) {
       console.error("Error fetching appointments:", error);
     }
+  };
+
+  // Update barber availability
+  const updateBarberAvailability = async (
+    barberId: string,
+    availabilities: Omit<BarberAvailability, "id" | "barber_id">[],
+  ) => {
+    try {
+      // First delete existing availability
+      const { error: deleteError } = await supabase
+        .from("barber_availability")
+        .delete()
+        .eq("barber_id", barberId);
+
+      if (deleteError) throw deleteError;
+
+      // Then insert new availability
+      if (availabilities.length > 0) {
+        const availabilitiesToInsert = availabilities.map((avail) => ({
+          barber_id: barberId,
+          day_of_week: avail.day_of_week,
+          start_time: avail.start_time,
+          end_time: avail.end_time,
+        }));
+
+        const { error: insertError } = await supabase
+          .from("barber_availability")
+          .insert(availabilitiesToInsert);
+
+        if (insertError) throw insertError;
+      }
+
+      // Update barber details to show as available
+      const { error: updateError } = await supabase
+        .from("barber_details")
+        .update({ availability_status: availabilities.length > 0 })
+        .eq("id", barberId);
+
+      if (updateError) throw updateError;
+
+      // Refresh barbers
+      await fetchBarbers();
+    } catch (error) {
+      console.error("Error updating barber availability:", error);
+      throw error;
+    }
+  };
+
+  // Get available time slots for a barber on a specific date
+  const getAvailableTimeSlots = (barberId: string, date: Date): string[] => {
+    const barber = barbers.find((b) => b.id === barberId);
+    if (
+      !barber ||
+      !barber.availableTimes ||
+      barber.availableTimes.length === 0
+    ) {
+      return [];
+    }
+
+    // Get day of week (0 = Sunday, 1 = Monday, etc.)
+    const dayOfWeek = date.getDay();
+
+    // Find availability for this day
+    const availability = barber.availableTimes.find(
+      (a) => a.day_of_week === dayOfWeek,
+    );
+    if (!availability) {
+      return [];
+    }
+
+    // Generate time slots in 30-minute increments
+    const slots: string[] = [];
+    const startTime = new Date(`1970-01-01T${availability.start_time}`);
+    const endTime = new Date(`1970-01-01T${availability.end_time}`);
+
+    // Get existing appointments for this barber on this date
+    const dateString = date.toISOString().split("T")[0]; // YYYY-MM-DD
+    const existingAppointments = appointments.filter(
+      (a) =>
+        a.barberId === barberId &&
+        (a.date === dateString ||
+          a.date === "Today" ||
+          a.date === "Tomorrow") &&
+        a.status !== "cancelled",
+    );
+
+    // Generate slots in 30-minute increments
+    const currentTime = new Date(startTime);
+    while (currentTime < endTime) {
+      const timeString = currentTime.toLocaleTimeString("en-US", {
+        hour: "numeric",
+        minute: "2-digit",
+        hour12: true,
+      });
+
+      // Check if this slot is already booked
+      const isBooked = existingAppointments.some((a) => a.time === timeString);
+
+      if (!isBooked) {
+        slots.push(timeString);
+      }
+
+      // Add 30 minutes
+      currentTime.setMinutes(currentTime.getMinutes() + 30);
+    }
+
+    return slots;
   };
 
   // Load data when user changes
@@ -569,6 +716,8 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({
         fetchBarbers,
         fetchServices,
         fetchAppointments,
+        updateBarberAvailability,
+        getAvailableTimeSlots,
       }}
     >
       {children}
@@ -578,6 +727,5 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({
 
 // Hook for using data context
 export const useData = () => {
-  const context = useContext(DataContext);
-  return context;
+  return useContext(DataContext);
 };
