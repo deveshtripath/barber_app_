@@ -6,7 +6,7 @@ interface BottomNavigationProps {
   className?: string;
 }
 
-const BottomNavigation = ({ className = "" }: BottomNavigationProps) => {
+function BottomNavigation({ className = "" }: BottomNavigationProps) {
   const location = useLocation();
   const currentPath = location.pathname;
 
@@ -62,6 +62,6 @@ const BottomNavigation = ({ className = "" }: BottomNavigationProps) => {
       </div>
     </div>
   );
-};
+}
 
 export default BottomNavigation;

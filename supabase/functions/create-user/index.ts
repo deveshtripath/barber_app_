@@ -68,11 +68,11 @@ serve(async (req) => {
       },
     });
 
-    const { name, email, password, phone, role, profile_image } =
-      await req.json();
+    const requestData = await req.json();
+    const { id, name, email, phone, role, profile_image } = requestData;
 
     // Validate required fields
-    if (!name || !email || !password || !role) {
+    if (!name || !email || !phone || !role) {
       return new Response(
         JSON.stringify({ error: "Missing required fields" }),
         {
@@ -95,59 +95,78 @@ serve(async (req) => {
       );
     }
 
-    // Check if email already exists
-    const { data: existingUser, error: existingUserError } =
+    // Check if user already exists (by phone number)
+    const { data: existingUserByPhone, error: existingUserPhoneError } =
       await supabaseClient
         .from("users")
-        .select("email")
-        .eq("email", email)
+        .select("phone")
+        .eq("phone", phone)
+        .maybeSingle();
+
+    if (existingUserByPhone) {
+      // If user exists with this phone, just return the existing user
+      const { data: existingUser, error: getUserError } = await supabaseClient
+        .from("users")
+        .select("*")
+        .eq("phone", phone)
         .single();
 
-    if (existingUser) {
+      if (getUserError) {
+        return new Response(JSON.stringify({ error: getUserError.message }), {
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+          status: 400,
+        });
+      }
+
       return new Response(
         JSON.stringify({
-          error: "Email already in use",
+          message: "User already exists",
+          user: existingUser,
         }),
         {
           headers: { ...corsHeaders, "Content-Type": "application/json" },
-          status: 400,
+          status: 200,
         },
       );
     }
 
-    // Hash the password
-    const salt = await bcrypt.genSalt(10);
-    const hashedPassword = await bcrypt.hash(password, salt);
+    // If we have an ID, this is a user created through OTP
+    let userId = id;
 
-    // Create auth user
-    const { data: authUser, error: authError } =
-      await supabaseClient.auth.admin.createUser({
-        email,
-        password,
-        email_confirm: true,
-        user_metadata: {
-          name,
-          role,
-        },
-      });
+    // If no ID is provided, we need to create a new user
+    if (!userId) {
+      // Create auth user with phone
+      const { data: authUser, error: authError } =
+        await supabaseClient.auth.admin.createUser({
+          phone,
+          email,
+          email_confirm: true,
+          phone_confirm: true,
+          user_metadata: {
+            name,
+            role,
+          },
+        });
 
-    if (authError) {
-      return new Response(JSON.stringify({ error: authError.message }), {
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-        status: 400,
-      });
+      if (authError) {
+        return new Response(JSON.stringify({ error: authError.message }), {
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+          status: 400,
+        });
+      }
+
+      userId = authUser.user.id;
     }
 
     // Create user profile
     const { data: userProfile, error: profileError } = await supabaseClient
       .from("users")
       .insert({
-        id: authUser.user.id,
+        id: userId,
         name,
         email,
         phone,
         role,
-        password_hash: hashedPassword,
         profile_image:
           profile_image ||
           `https://api.dicebear.com/7.x/avataaars/svg?seed=${name.toLowerCase().replace(/\s+/g, "")}`,
@@ -156,8 +175,10 @@ serve(async (req) => {
       .single();
 
     if (profileError) {
-      // Rollback auth user creation if profile creation fails
-      await supabaseClient.auth.admin.deleteUser(authUser.user.id);
+      // Rollback auth user creation if profile creation fails and we created a new user
+      if (!id) {
+        await supabaseClient.auth.admin.deleteUser(userId);
+      }
 
       return new Response(JSON.stringify({ error: profileError.message }), {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
@@ -170,7 +191,7 @@ serve(async (req) => {
       const { error: barberError } = await supabaseClient
         .from("barber_details")
         .insert({
-          id: authUser.user.id,
+          id: userId,
           specialty: "Haircuts",
           experience: 1,
           rating: 4.5,

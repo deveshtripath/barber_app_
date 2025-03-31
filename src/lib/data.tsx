@@ -5,8 +5,24 @@ import {
   useEffect,
   ReactNode,
 } from "react";
-import { supabase } from "./supabase";
 import { useAuth } from "./auth";
+import {
+  collection,
+  doc,
+  getDoc,
+  getDocs,
+  query,
+  where,
+  addDoc,
+  updateDoc,
+  deleteDoc,
+  serverTimestamp,
+  Timestamp,
+  orderBy,
+  limit,
+  onSnapshot,
+} from "firebase/firestore";
+import { db } from "./firebase";
 
 // Types
 export interface Barber {
@@ -200,40 +216,51 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({
   const [promotions, setPromotions] = useState<Promotion[]>(MOCK_PROMOTIONS);
   const [categories, setCategories] = useState<Category[]>(MOCK_CATEGORIES);
 
-  // Fetch barbers from database
+  // Fetch barbers from Firestore
   const fetchBarbers = async () => {
     try {
-      // Get barber profiles
-      const { data: barberUsers, error: barberError } = await supabase
-        .from("users")
-        .select("id, name, email, phone, profile_image, role")
-        .eq("role", "barber");
+      // Get barber users
+      const usersQuery = query(
+        collection(db, "users"),
+        where("role", "==", "barber"),
+      );
+      const userSnapshot = await getDocs(usersQuery);
+      const barberUsers = userSnapshot.docs.map((doc) => ({
+        id: doc.id,
+        ...doc.data(),
+      }));
 
-      if (barberError) throw barberError;
-
-      if (barberUsers) {
+      if (barberUsers.length > 0) {
         // Get barber details
-        const { data: barberDetails, error: detailsError } = await supabase
-          .from("barber_details")
-          .select("id, specialty, rating, location, availability_status");
-
-        if (detailsError) throw detailsError;
+        const barberDetailsPromises = barberUsers.map(
+          async (barberUser: any) => {
+            const detailsDoc = await getDoc(
+              doc(db, "barber_details", barberUser.id),
+            );
+            return detailsDoc.exists()
+              ? { id: detailsDoc.id, ...detailsDoc.data() }
+              : null;
+          },
+        );
+        const barberDetails = await Promise.all(barberDetailsPromises);
 
         // Get barber availability
-        const { data: barberAvailability, error: availabilityError } =
-          await supabase.from("barber_availability").select("*");
-
-        if (availabilityError) throw availabilityError;
+        const availabilityQuery = query(collection(db, "barber_availability"));
+        const availabilitySnapshot = await getDocs(availabilityQuery);
+        const barberAvailability = availabilitySnapshot.docs.map((doc) => ({
+          id: doc.id,
+          ...doc.data(),
+        }));
 
         // Combine user profiles with barber details
-        const combinedBarbers = barberUsers.map((barberUser) => {
-          const details = barberDetails?.find(
-            (detail) => detail.id === barberUser.id,
+        const combinedBarbers = barberUsers.map((barberUser: any) => {
+          const details = barberDetails.find(
+            (detail: any) => detail && detail.id === barberUser.id,
           );
 
           const availability =
-            barberAvailability?.filter(
-              (avail) => avail.barber_id === barberUser.id,
+            barberAvailability.filter(
+              (avail: any) => avail.barber_id === barberUser.id,
             ) || [];
 
           return {
@@ -255,7 +282,7 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({
 
         // Only show available barbers
         const availableBarbers = combinedBarbers.filter(
-          (barber) =>
+          (barber: Barber) =>
             barber.availability === "Available" &&
             barber.availableTimes &&
             barber.availableTimes.length > 0,
@@ -268,11 +295,11 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({
     }
   };
 
-  // Fetch services from database
+  // Fetch services from Firestore
   const fetchServices = async () => {
     try {
       // For now, we'll use mock data until we implement services in the database
-      // In a real implementation, you would fetch from the database
+      // In a real implementation, you would fetch from Firestore
       setServices([
         {
           id: "s1",
@@ -375,103 +402,113 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({
             "https://images.unsplash.com/photo-1493256338651-d82f7acb2b38?w=800&q=80",
         },
       ]);
+
+      // In a real implementation, you would fetch from Firestore like this:
+      /*
+      const servicesQuery = query(collection(db, "services"));
+      const servicesSnapshot = await getDocs(servicesQuery);
+      const servicesData = servicesSnapshot.docs.map(doc => ({
+        id: doc.id,
+        ...doc.data()
+      }));
+      setServices(servicesData);
+      */
     } catch (error) {
       console.error("Error fetching services:", error);
     }
   };
 
-  // Fetch appointments from database
+  // Fetch appointments from Firestore
   const fetchAppointments = async () => {
     if (!user) return;
 
     try {
-      let query = supabase.from("appointments").select(`
-          id, 
-          appointment_time, 
-          service_type, 
-          status, 
-          barber_id, 
-          customer_id
-        `);
+      let appointmentsQuery;
 
       // Filter based on user role
       if (user.role === "customer") {
-        query = query.eq("customer_id", user.id);
-      } else if (user.role === "barber") {
-        query = query.eq("barber_id", user.id);
-      }
-
-      const { data, error } = await query;
-
-      if (error) throw error;
-
-      if (data) {
-        // Get customer and barber details for each appointment
-        const appointmentsWithDetails = await Promise.all(
-          data.map(async (appointment) => {
-            // Get customer details
-            const { data: customerData } = await supabase
-              .from("users")
-              .select("name, profile_image")
-              .eq("id", appointment.customer_id)
-              .single();
-
-            // Get barber details
-            const { data: barberData } = await supabase
-              .from("users")
-              .select("name")
-              .eq("id", appointment.barber_id)
-              .single();
-
-            // Format date and time
-            const appointmentDate = new Date(appointment.appointment_time);
-            const today = new Date();
-            const tomorrow = new Date(today);
-            tomorrow.setDate(tomorrow.getDate() + 1);
-
-            let dateString;
-            if (appointmentDate.toDateString() === today.toDateString()) {
-              dateString = "Today";
-            } else if (
-              appointmentDate.toDateString() === tomorrow.toDateString()
-            ) {
-              dateString = "Tomorrow";
-            } else {
-              dateString = appointmentDate.toISOString().split("T")[0]; // YYYY-MM-DD
-            }
-
-            const timeString = appointmentDate.toLocaleTimeString("en-US", {
-              hour: "numeric",
-              minute: "2-digit",
-              hour12: true,
-            });
-
-            // Get service details to calculate price
-            const service = services.find(
-              (s) => s.name === appointment.service_type,
-            );
-            const price = service?.price || 30; // Default price if service not found
-
-            return {
-              id: appointment.id,
-              customerId: appointment.customer_id,
-              barberId: appointment.barber_id,
-              serviceIds: [appointment.service_type],
-              date: dateString,
-              time: timeString,
-              status: appointment.status,
-              totalPrice: price,
-              customerName: customerData?.name || "Customer",
-              customerAvatar:
-                customerData?.profile_image ||
-                `https://api.dicebear.com/7.x/avataaars/svg?seed=${customerData?.name || "customer"}`,
-              service: appointment.service_type,
-            };
-          }),
+        appointmentsQuery = query(
+          collection(db, "appointments"),
+          where("customer_id", "==", user.id),
         );
-
-        setAppointments(appointmentsWithDetails);
+      } else if (user.role === "barber") {
+        appointmentsQuery = query(
+          collection(db, "appointments"),
+          where("barber_id", "==", user.id),
+        );
+      } else {
+        appointmentsQuery = query(collection(db, "appointments"));
       }
+
+      const appointmentsSnapshot = await getDocs(appointmentsQuery);
+      const appointmentsData = appointmentsSnapshot.docs.map((doc) => ({
+        id: doc.id,
+        ...doc.data(),
+      }));
+
+      // Get customer and barber details for each appointment
+      const appointmentsWithDetails = await Promise.all(
+        appointmentsData.map(async (appointment: any) => {
+          // Get customer details
+          const customerDoc = await getDoc(
+            doc(db, "users", appointment.customer_id),
+          );
+          const customerData = customerDoc.exists() ? customerDoc.data() : null;
+
+          // Get barber details
+          const barberDoc = await getDoc(
+            doc(db, "users", appointment.barber_id),
+          );
+          const barberData = barberDoc.exists() ? barberDoc.data() : null;
+
+          // Format date and time
+          const appointmentDate = new Date(appointment.appointment_time);
+          const today = new Date();
+          const tomorrow = new Date(today);
+          tomorrow.setDate(tomorrow.getDate() + 1);
+
+          let dateString;
+          if (appointmentDate.toDateString() === today.toDateString()) {
+            dateString = "Today";
+          } else if (
+            appointmentDate.toDateString() === tomorrow.toDateString()
+          ) {
+            dateString = "Tomorrow";
+          } else {
+            dateString = appointmentDate.toISOString().split("T")[0]; // YYYY-MM-DD
+          }
+
+          const timeString = appointmentDate.toLocaleTimeString("en-US", {
+            hour: "numeric",
+            minute: "2-digit",
+            hour12: true,
+          });
+
+          // Get service details to calculate price
+          const service = services.find(
+            (s) => s.name === appointment.service_type,
+          );
+          const price = service?.price || 30; // Default price if service not found
+
+          return {
+            id: appointment.id,
+            customerId: appointment.customer_id,
+            barberId: appointment.barber_id,
+            serviceIds: [appointment.service_type],
+            date: dateString,
+            time: timeString,
+            status: appointment.status,
+            totalPrice: price,
+            customerName: customerData?.name || "Customer",
+            customerAvatar:
+              customerData?.profile_image ||
+              `https://api.dicebear.com/7.x/avataaars/svg?seed=${customerData?.name || "customer"}`,
+            service: appointment.service_type,
+          };
+        }),
+      );
+
+      setAppointments(appointmentsWithDetails);
     } catch (error) {
       console.error("Error fetching appointments:", error);
     }
@@ -484,36 +521,37 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({
   ) => {
     try {
       // First delete existing availability
-      const { error: deleteError } = await supabase
-        .from("barber_availability")
-        .delete()
-        .eq("barber_id", barberId);
+      const availabilityQuery = query(
+        collection(db, "barber_availability"),
+        where("barber_id", "==", barberId),
+      );
+      const availabilitySnapshot = await getDocs(availabilityQuery);
 
-      if (deleteError) throw deleteError;
+      // Delete existing availability documents
+      const deletePromises = availabilitySnapshot.docs.map((doc) =>
+        deleteDoc(doc.ref),
+      );
+      await Promise.all(deletePromises);
 
       // Then insert new availability
       if (availabilities.length > 0) {
-        const availabilitiesToInsert = availabilities.map((avail) => ({
-          barber_id: barberId,
-          day_of_week: avail.day_of_week,
-          start_time: avail.start_time,
-          end_time: avail.end_time,
-        }));
-
-        const { error: insertError } = await supabase
-          .from("barber_availability")
-          .insert(availabilitiesToInsert);
-
-        if (insertError) throw insertError;
+        const addPromises = availabilities.map((avail) =>
+          addDoc(collection(db, "barber_availability"), {
+            barber_id: barberId,
+            day_of_week: avail.day_of_week,
+            start_time: avail.start_time,
+            end_time: avail.end_time,
+            created_at: serverTimestamp(),
+          }),
+        );
+        await Promise.all(addPromises);
       }
 
       // Update barber details to show as available
-      const { error: updateError } = await supabase
-        .from("barber_details")
-        .update({ availability_status: availabilities.length > 0 })
-        .eq("id", barberId);
-
-      if (updateError) throw updateError;
+      await updateDoc(doc(db, "barber_details", barberId), {
+        availability_status: availabilities.length > 0,
+        updated_at: serverTimestamp(),
+      });
 
       // Refresh barbers
       await fetchBarbers();
@@ -608,19 +646,24 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({
   // CRUD operations
   const createAppointment = async (appointment: Omit<Appointment, "id">) => {
     try {
-      // Call the book-appointment edge function
-      const { data, error } = await supabase.functions.invoke(
-        "supabase-functions-book-appointment",
-        {
-          body: {
-            barber_id: appointment.barberId,
-            service_type: appointment.serviceIds[0], // Using first service for now
-            appointment_time: `${appointment.date}T${appointment.time}`,
-          },
-        },
-      );
+      // Format date and time for Firestore
+      const appointmentTime = `${appointment.date}T${appointment.time}`;
 
-      if (error) throw error;
+      // Create appointment in Firestore
+      const appointmentData = {
+        customer_id: appointment.customerId,
+        barber_id: appointment.barberId,
+        service_type: appointment.serviceIds[0], // Using first service for now
+        appointment_time: appointmentTime,
+        status: "pending",
+        total_price: appointment.totalPrice,
+        created_at: serverTimestamp(),
+      };
+
+      const appointmentRef = await addDoc(
+        collection(db, "appointments"),
+        appointmentData,
+      );
 
       // Refresh appointments after creating a new one
       await fetchAppointments();
@@ -628,7 +671,7 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({
       // Return the created appointment
       return {
         ...appointment,
-        id: data.appointment.id,
+        id: appointmentRef.id,
       };
     } catch (error) {
       console.error("Error creating appointment:", error);
@@ -641,24 +684,26 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({
     updates: Partial<Appointment>,
   ) => {
     try {
-      // Format date and time for database
+      // Format date and time for Firestore
       let appointmentTime;
       if (updates.date && updates.time) {
         appointmentTime = `${updates.date}T${updates.time}`;
       }
 
-      // Update appointment in database
-      const { data, error } = await supabase
-        .from("appointments")
-        .update({
-          appointment_time: appointmentTime,
-          status: updates.status,
-        })
-        .eq("id", id)
-        .select()
-        .single();
+      // Update appointment in Firestore
+      const updateData: any = {};
 
-      if (error) throw error;
+      if (appointmentTime) {
+        updateData.appointment_time = appointmentTime;
+      }
+
+      if (updates.status) {
+        updateData.status = updates.status;
+      }
+
+      updateData.updated_at = serverTimestamp();
+
+      await updateDoc(doc(db, "appointments", id), updateData);
 
       // Refresh appointments
       await fetchAppointments();
@@ -680,13 +725,11 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({
 
   const cancelAppointment = async (id: string) => {
     try {
-      // Update appointment status to cancelled
-      const { error } = await supabase
-        .from("appointments")
-        .update({ status: "cancelled" })
-        .eq("id", id);
-
-      if (error) throw error;
+      // Update appointment status to cancelled in Firestore
+      await updateDoc(doc(db, "appointments", id), {
+        status: "cancelled",
+        updated_at: serverTimestamp(),
+      });
 
       // Refresh appointments
       await fetchAppointments();
@@ -726,6 +769,6 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({
 };
 
 // Hook for using data context
-export const useData = () => {
+export function useData() {
   return useContext(DataContext);
-};
+}

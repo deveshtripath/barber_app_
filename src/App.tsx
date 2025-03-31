@@ -2,12 +2,8 @@ import { Suspense, lazy } from "react";
 import { useRoutes, Routes, Route, Navigate } from "react-router-dom";
 import Home from "./components/home";
 import routes from "tempo-routes";
-import { AuthProvider, ProtectedRoute } from "./lib/auth";
 import { DataProvider } from "./lib/data";
-
-// Auth Pages
-const Login = lazy(() => import("./pages/auth/Login"));
-const Register = lazy(() => import("./pages/auth/Register"));
+import { AuthProvider } from "./lib/auth";
 
 // Customer Pages
 const CustomerHome = lazy(() => import("./pages/customer/Home"));
@@ -40,6 +36,10 @@ const BarberDashboard = lazy(() => import("./pages/barber/Dashboard"));
 // Admin Pages
 const AdminDashboard = lazy(() => import("./pages/admin/Dashboard"));
 
+// Auth Pages
+const Login = lazy(() => import("./pages/auth/Login"));
+const Register = lazy(() => import("./pages/auth/Register"));
+
 function App() {
   return (
     <AuthProvider>
@@ -53,147 +53,67 @@ function App() {
         >
           <>
             <Routes>
-              {/* Public Routes */}
-              <Route path="/" element={<Navigate to="/login" />} />
+              {/* Auth Routes */}
               <Route path="/login" element={<Login />} />
               <Route path="/register" element={<Register />} />
+
+              {/* Public Routes */}
+              <Route path="/" element={<Navigate to="/customer/home" />} />
 
               {/* Customer Routes */}
               <Route
                 path="/customer"
-                element={
-                  <ProtectedRoute allowedRoles={["customer"]}>
-                    <Navigate to="/customer/home" />
-                  </ProtectedRoute>
-                }
+                element={<Navigate to="/customer/home" />}
               />
-              <Route
-                path="/customer/home"
-                element={
-                  <ProtectedRoute allowedRoles={["customer"]}>
-                    <CustomerHome />
-                  </ProtectedRoute>
-                }
-              />
+              <Route path="/customer/home" element={<CustomerHome />} />
               <Route
                 path="/customer/appointments"
-                element={
-                  <ProtectedRoute allowedRoles={["customer"]}>
-                    <CustomerAppointments />
-                  </ProtectedRoute>
-                }
+                element={<CustomerAppointments />}
               />
               <Route
                 path="/customer/appointments/:appointmentId"
-                element={
-                  <ProtectedRoute allowedRoles={["customer"]}>
-                    <CustomerAppointmentDetail />
-                  </ProtectedRoute>
-                }
+                element={<CustomerAppointmentDetail />}
               />
               <Route
                 path="/customer/appointments/new"
-                element={
-                  <ProtectedRoute allowedRoles={["customer"]}>
-                    <CustomerAppointmentBooking />
-                  </ProtectedRoute>
-                }
+                element={<CustomerAppointmentBooking />}
               />
               <Route
                 path="/customer/appointments/reschedule/:appointmentId"
-                element={
-                  <ProtectedRoute allowedRoles={["customer"]}>
-                    <CustomerAppointmentReschedule />
-                  </ProtectedRoute>
-                }
+                element={<CustomerAppointmentReschedule />}
               />
-              <Route
-                path="/customer/services"
-                element={
-                  <ProtectedRoute allowedRoles={["customer"]}>
-                    <CustomerServices />
-                  </ProtectedRoute>
-                }
-              />
+              <Route path="/customer/services" element={<CustomerServices />} />
               <Route
                 path="/customer/services/:serviceId"
-                element={
-                  <ProtectedRoute allowedRoles={["customer"]}>
-                    <CustomerServiceDetail />
-                  </ProtectedRoute>
-                }
+                element={<CustomerServiceDetail />}
               />
-              <Route
-                path="/customer/profile"
-                element={
-                  <ProtectedRoute allowedRoles={["customer"]}>
-                    <CustomerProfile />
-                  </ProtectedRoute>
-                }
-              />
-              <Route
-                path="/customer/rewards"
-                element={
-                  <ProtectedRoute allowedRoles={["customer"]}>
-                    <CustomerRewards />
-                  </ProtectedRoute>
-                }
-              />
+              <Route path="/customer/profile" element={<CustomerProfile />} />
+              <Route path="/customer/rewards" element={<CustomerRewards />} />
               <Route
                 path="/customer/notifications"
-                element={
-                  <ProtectedRoute allowedRoles={["customer"]}>
-                    <CustomerNotifications />
-                  </ProtectedRoute>
-                }
+                element={<CustomerNotifications />}
               />
               <Route
                 path="/customer/hairstyles"
-                element={
-                  <ProtectedRoute allowedRoles={["customer"]}>
-                    <CustomerHairstyles />
-                  </ProtectedRoute>
-                }
+                element={<CustomerHairstyles />}
               />
 
               {/* Barber Routes */}
               <Route
                 path="/barber"
-                element={
-                  <ProtectedRoute allowedRoles={["barber"]}>
-                    <Navigate to="/barber/dashboard" />
-                  </ProtectedRoute>
-                }
+                element={<Navigate to="/barber/dashboard" />}
               />
-              <Route
-                path="/barber/dashboard"
-                element={
-                  <ProtectedRoute allowedRoles={["barber"]}>
-                    <BarberDashboard />
-                  </ProtectedRoute>
-                }
-              />
+              <Route path="/barber/dashboard" element={<BarberDashboard />} />
 
               {/* Admin Routes */}
               <Route
                 path="/admin"
-                element={
-                  <ProtectedRoute allowedRoles={["admin"]}>
-                    <Navigate to="/admin/dashboard" />
-                  </ProtectedRoute>
-                }
+                element={<Navigate to="/admin/dashboard" />}
               />
-              <Route
-                path="/admin/dashboard"
-                element={
-                  <ProtectedRoute allowedRoles={["admin"]}>
-                    <AdminDashboard />
-                  </ProtectedRoute>
-                }
-              />
+              <Route path="/admin/dashboard" element={<AdminDashboard />} />
 
               {/* Fallback */}
-              <Route path="*" element={<Navigate to="/login" />} />
+              <Route path="*" element={<Navigate to="/customer/home" />} />
             </Routes>
             {import.meta.env.VITE_TEMPO === "true" && useRoutes(routes)}
           </>

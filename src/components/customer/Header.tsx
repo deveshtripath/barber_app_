@@ -13,13 +13,13 @@ interface HeaderProps {
   onProfileClick?: () => void;
 }
 
-const Header = ({
+function Header({
   userName = "John Doe",
   userAvatar = "",
   notificationCount = 3,
   onNotificationClick = () => {},
   onProfileClick = () => {},
-}: HeaderProps) => {
+}: HeaderProps) {
   return (
     <header className="w-full h-[60px] px-4 py-2 flex items-center justify-between bg-white border-b border-gray-200 fixed top-0 left-0 right-0 z-50">
       <div className="flex items-center">
@@ -68,6 +68,6 @@ const Header = ({
       </div>
     </header>
   );
-};
+}
 
 export default Header;
