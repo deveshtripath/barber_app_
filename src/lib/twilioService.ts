@@ -1,8 +1,8 @@
 import axios from "axios";
 
-const TWILIO_SERVICE_SID = "VAa43c90f4a947832c6886fa19656e4885";
-const TWILIO_ACCOUNT_SID = "AC352ceea8bcd03a57bfb4ce622b6cd7a9";
-const TWILIO_AUTH_TOKEN = "3d1ceac9f7e5c0bee17ec051273eeb5e";
+const TWILIO_SERVICE_SID = import.meta.env.TWILIO_SERVICE_SID;
+const TWILIO_ACCOUNT_SID = import.meta.env.TWILIO_ACCOUNT_SID;
+const TWILIO_AUTH_TOKEN = import.meta.env.TWILIO_AUTH_TOKEN;
 const TWILIO_API_URL = `https://verify.twilio.com/v2/Services/${TWILIO_SERVICE_SID}/Verifications`;
 
 const sendVerificationCode = async (phoneNumber: string) => {
