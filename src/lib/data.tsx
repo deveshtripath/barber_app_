@@ -24,12 +24,42 @@ import {
 } from "firebase/firestore";
 import { db } from "./firebase";
 
+// User model interface
+export interface User {
+  fullName: string;
+  phoneNumber: string;
+  password: string; // Note: Password should be handled securely
+  location: string;
+  image: string;
+  isBarber: boolean;
+}
+
+// Function to create a new user
+export const createUser = async (userData: User) => {
+  try {
+    const userRef = collection(db, 'users'); // Assuming 'users' is your collection name
+    const docRef = await addDoc(userRef, userData);
+    console.log("User created with ID: ", docRef.id);
+    return docRef.id; // Return the ID of the created user
+  } catch (error) {
+    console.error("Error creating user: ", error);
+    throw new Error("Failed to create user");
+  }
+};
+
+
 // Types
 export interface Barber {
   id: string;
   name: string;
   rating: number;
-  specialty: string;
+  specialty: {
+    id: string;
+    name: string;
+    description: string;
+    time: number;  // in minutes
+    money: number; // price for the service
+  }[];
   imageUrl: string;
   availability: string;
   phone: string;
@@ -219,81 +249,97 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({
   // Fetch barbers from Firestore
   const fetchBarbers = async () => {
     try {
-      // Get barber users
+      // Query to get barbers
       const usersQuery = query(
-        collection(db, "users"),
-        where("role", "==", "barber"),
+        collection(db, "barbers"),
+        where("role", "==", "barber")
       );
       const userSnapshot = await getDocs(usersQuery);
       const barberUsers = userSnapshot.docs.map((doc) => ({
         id: doc.id,
         ...doc.data(),
       }));
-
+  
       if (barberUsers.length > 0) {
-        // Get barber details
-        const barberDetailsPromises = barberUsers.map(
-          async (barberUser: any) => {
-            const detailsDoc = await getDoc(
-              doc(db, "barber_details", barberUser.id),
-            );
-            return detailsDoc.exists()
-              ? { id: detailsDoc.id, ...detailsDoc.data() }
-              : null;
-          },
-        );
+        // Fetch details for each barber (including specialties)
+        const barberDetailsPromises = barberUsers.map(async (barberUser: any) => {
+          const detailsDoc = await getDoc(doc(db, "barber_details", barberUser.id));
+          return detailsDoc.exists()
+            ? { id: detailsDoc.id, ...detailsDoc.data() }
+            : null;
+        });
         const barberDetails = await Promise.all(barberDetailsPromises);
-
-        // Get barber availability
+  
+        // Fetch availability data for barbers
         const availabilityQuery = query(collection(db, "barber_availability"));
         const availabilitySnapshot = await getDocs(availabilityQuery);
         const barberAvailability = availabilitySnapshot.docs.map((doc) => ({
           id: doc.id,
           ...doc.data(),
         }));
-
-        // Combine user profiles with barber details
+  
+        // Combine barber data with details and availability
         const combinedBarbers = barberUsers.map((barberUser: any) => {
           const details = barberDetails.find(
-            (detail: any) => detail && detail.id === barberUser.id,
+            (detail: any) => detail && detail.id === barberUser.id
           );
-
+  
           const availability =
             barberAvailability.filter(
-              (avail: any) => avail.barber_id === barberUser.id,
+              (avail: any) => avail.barber_id === barberUser.id
             ) || [];
-
+  
+          // If details are available, map specialty to array of specialties
+          const specialties = details?.specialties || [
+            {
+              id: "default",
+              name: "Haircuts",
+              description: "Basic haircuts",
+              time: 60, // default 60 minutes
+              money: 20, // default $20
+            },
+          ];
+  
           return {
             id: barberUser.id,
             name: barberUser.name,
-            rating: details?.rating || 4.5,
-            specialty: details?.specialty || "Haircuts",
+            rating: details?.rating || 4.5, // default rating
+            specialties: specialties.map((specialty: any) => ({
+              id: specialty.id,
+              name: specialty.name || "Haircuts",
+              description: specialty.description || "No description",
+              time: specialty.time || 60,
+              money: specialty.money || 20,
+            })),
             imageUrl:
               barberUser.profile_image ||
-              `https://api.dicebear.com/7.x/avataaars/svg?seed=${barberUser.name.toLowerCase().replace(/\s+/g, "")}`,
-            availability: details?.availability_status
-              ? "Available"
-              : "Unavailable",
+              `https://api.dicebear.com/7.x/avataaars/svg?seed=${barberUser.name
+                .toLowerCase()
+                .replace(/\s+/g, "")}`,
+            availability: details?.availability_status ? "Available" : "Unavailable",
             phone: barberUser.phone || "+1 (555) 123-4567",
             location: details?.location || "Main Street Shop",
             availableTimes: availability,
           };
         });
-
-        // Only show available barbers
+  
+        // Filter out only the barbers that are available
         const availableBarbers = combinedBarbers.filter(
           (barber: Barber) =>
             barber.availability === "Available" &&
             barber.availableTimes &&
-            barber.availableTimes.length > 0,
+            barber.availableTimes.length > 0
         );
-
+  
+        // Set available barbers in state
         setBarbers(availableBarbers);
       }
     } catch (error) {
       console.error("Error fetching barbers:", error);
     }
   };
+  
+  
 
   // Fetch services from Firestore
   const fetchServices = async () => {
@@ -646,33 +692,29 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({
   // CRUD operations
   const createAppointment = async (appointment: Omit<Appointment, "id">) => {
     try {
-      // Format date and time for Firestore
+      if (!appointment.customerId || !appointment.barberId) {
+        throw new Error(`Customer ID and Barber ID are required. Received: ${appointment.customerId}, ${appointment.barberId}`);
+      }
+  
       const appointmentTime = `${appointment.date}T${appointment.time}`;
-
-      // Create appointment in Firestore
+  
       const appointmentData = {
         customer_id: appointment.customerId,
         barber_id: appointment.barberId,
-        service_type: appointment.serviceIds[0], // Using first service for now
+        service_type: appointment.serviceIds  || "Unknown Service", // Ensure it exists
         appointment_time: appointmentTime,
         status: "pending",
-        total_price: appointment.totalPrice,
+        total_price: appointment.totalPrice ?? 0,
         created_at: serverTimestamp(),
       };
 
-      const appointmentRef = await addDoc(
-        collection(db, "appointments"),
-        appointmentData,
-      );
-
-      // Refresh appointments after creating a new one
-      await fetchAppointments();
-
-      // Return the created appointment
-      return {
-        ...appointment,
-        id: appointmentRef.id,
-      };
+      console.log(appointmentData);
+  
+      const appointmentRef = await addDoc(collection(db, "appointments"), appointmentData);
+      console.log("jdbiwhfioewhjf2j3");
+      if (typeof fetchAppointments === "function") await fetchAppointments();
+  
+      return { ...appointment, id: appointmentRef.id };
     } catch (error) {
       console.error("Error creating appointment:", error);
       throw error;

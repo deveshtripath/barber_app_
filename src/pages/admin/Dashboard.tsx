@@ -62,11 +62,12 @@ const AdminDashboard = () => {
             <Avatar>
               <AvatarImage src={user?.avatar} alt={user?.name} />
               <AvatarFallback className="bg-primary/10 text-primary">
-                {user?.name
-                  .split(" ")
-                  .map((name) => name[0])
-                  .join("")
-                  .toUpperCase()}
+              {user?.name ? 
+              user.name.split(" ")
+                .map((name) => name[0])
+                .join("")
+                .toUpperCase()
+              : ""}
               </AvatarFallback>
             </Avatar>
             <div>
@@ -147,11 +148,12 @@ const AdminDashboard = () => {
             <Avatar className="h-8 w-8">
               <AvatarImage src={user?.avatar} alt={user?.name} />
               <AvatarFallback className="bg-primary/10 text-primary text-xs">
-                {user?.name
-                  .split(" ")
-                  .map((name) => name[0])
-                  .join("")
-                  .toUpperCase()}
+              {user?.name ? 
+              user.name.split(" ")
+                .map((name) => name[0])
+                .join("")
+                .toUpperCase()
+              : ""}
               </AvatarFallback>
             </Avatar>
           </div>

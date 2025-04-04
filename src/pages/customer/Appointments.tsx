@@ -1,14 +1,14 @@
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import Header from "@/components/customer/Header";
-import BottomNavigation from "@/components/customer/BottomNavigation";
-import { useData } from "@/lib/data";
-import { useAuth } from "@/lib/auth";
-import { Button } from "@/components/ui/button";
-import { Card, CardContent } from "@/components/ui/card";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import Header from "../../components/customer/Header";
+import BottomNavigation from "../../components/customer/BottomNavigation";
+import { useData } from "../../lib/data";
+import { useAuth } from "../../lib/auth";
+import { Button } from "../../components/ui/button";
+import { Card, CardContent } from "../../components/ui/card";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "../../components/ui/tabs";
 import { Calendar, Clock, MapPin, User, AlertCircle } from "lucide-react";
-import { Badge } from "@/components/ui/badge";
+import { Badge } from "../../components/ui/badge";
 import {
   Dialog,
   DialogContent,
@@ -16,36 +16,38 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
-  DialogTrigger,
-} from "@/components/ui/dialog";
+} from "../../components/ui/dialog";
+import AppointmentsFetchTemp from "./AppointmentsFetch";
+import AppointmentsFetch from "./AppointmentsFetch";
 
 const Appointments = () => {
   const { user } = useAuth();
   const { appointments, barbers, services, cancelAppointment } = useData();
   const navigate = useNavigate();
   const [cancelDialogOpen, setCancelDialogOpen] = useState(false);
-  const [selectedAppointmentId, setSelectedAppointmentId] = useState<
-    string | null
-  >(null);
+  const [selectedAppointmentId, setSelectedAppointmentId] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
 
+  // Ensure user is authenticated
+  if (!user) {
+    return <div>Please log in to view your appointments.</div>;
+  }
+
   // Filter appointments by current user
-  const userAppointments = user
-    ? appointments.filter((a) => a.customerId === user.id)
-    : [];
+  const userAppointments = appointments.filter((a) => a.customerId === user.id);
 
   const upcomingAppointments = userAppointments.filter(
-    (a) => a.status === "pending" || a.status === "confirmed",
+    (a) => a.status === "pending" || a.status === "confirmed"
   );
 
   const pastAppointments = userAppointments.filter(
-    (a) => a.status === "completed" || a.status === "cancelled",
+    (a) => a.status === "completed" || a.status === "cancelled"
   );
 
   const handleReschedule = (appointmentId: string) => {
     navigate(`/customer/appointments/reschedule/${appointmentId}`);
   };
-  
+
   const handleViewAppointment = (appointmentId: string) => {
     navigate(`/customer/appointments/${appointmentId}`);
   };
@@ -146,7 +148,7 @@ const Appointments = () => {
               {upcomingAppointments.length === 0 ? (
                 <div className="text-center py-8">
                   <AlertCircle className="h-12 w-12 text-gray-400 mx-auto mb-4" />
-                  <p className="text-gray-500">No upcoming appointments</p>
+                  <AppointmentsFetch/>
                   <Button
                     variant="outline"
                     className="mt-4"

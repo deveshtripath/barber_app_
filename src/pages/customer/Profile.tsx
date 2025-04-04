@@ -1,15 +1,15 @@
 import React, { useState, useRef } from "react";
 import { useNavigate } from "react-router-dom";
-import Header from "@/components/customer/Header";
-import BottomNavigation from "@/components/customer/BottomNavigation";
-import { useAuth } from "@/lib/auth";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { Separator } from "@/components/ui/separator";
-import { Switch } from "@/components/ui/switch";
+import Header from "../../components/customer/Header"; 
+import BottomNavigation from "../../components/customer/BottomNavigation"; 
+import { useAuth } from "../../lib/auth"; 
+import { Button } from "../../components/ui/button"; 
+import { Input } from "../../components/ui/input"; 
+import { Label } from "../../components/ui/label"; 
+import { Card, CardContent, CardHeader, CardTitle } from "../../components/ui/card"; 
+import { Avatar, AvatarFallback, AvatarImage } from "../../components/ui/avatar"; 
+import { Separator } from "../../components/ui/separator"; 
+import { Switch } from "../../components/ui/switch"; 
 import {
   LogOut,
   User,
@@ -21,8 +21,9 @@ import {
   Mail,
   Phone,
   AlertCircle,
+  MapPin,
 } from "lucide-react";
-import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Alert, AlertDescription } from "../../components/ui/alert"; 
 import {
   Dialog,
   DialogContent,
@@ -30,34 +31,37 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
-} from "@/components/ui/dialog";
+} from "../../components/ui/dialog"; 
 
-const Profile = () => {
+const Profile: React.FC = () => {
   const { user, logout, updateUserProfile, uploadProfileImage } = useAuth();
   const navigate = useNavigate();
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const [name, setName] = useState(user?.name || "");
-  const [email, setEmail] = useState(user?.email || "");
-  const [phone, setPhone] = useState(user?.phone || "");
+  // Initialize state with user data
+  const [name, setName] = useState(user?.fullName || "");
+  const [phone, setPhone] = useState(user?.phoneNumber || "");
   const [isEditing, setIsEditing] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
   const [logoutDialogOpen, setLogoutDialogOpen] = useState(false);
+  const [fullName, setFullName] = useState(user?.fullName || "");
+  const [phoneNumber, setPhoneNumber] = useState(user?.phoneNumber || "");
+  const [location, setLocation] = useState(user?.location || "");
+
 
   const handleSaveProfile = async () => {
     if (!user) return;
-
     setIsLoading(true);
     setError(null);
     setSuccess(null);
 
     try {
       await updateUserProfile({
-        name,
-        email,
-        phone,
+        fullName,
+        phoneNumber,
+        location,
       });
       setSuccess("Profile updated successfully");
       setIsEditing(false);
@@ -69,34 +73,22 @@ const Profile = () => {
     }
   };
 
-  const handleCancel = () => {
-    setName(user?.name || "");
-    setEmail(user?.email || "");
-    setPhone(user?.phone || "");
-    setIsEditing(false);
-    setError(null);
-  };
-
-  const handleImageClick = () => {
-    fileInputRef.current?.click();
-  };
-
   const handleImageChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
-
     setIsLoading(true);
-    setError(null);
-
     try {
       await uploadProfileImage(file);
       setSuccess("Profile image updated successfully");
-      setTimeout(() => setSuccess(null), 3000);
     } catch (err: any) {
       setError(err.message || "Failed to upload image");
     } finally {
       setIsLoading(false);
     }
+  };
+
+  const handleImageClick = () => {
+    fileInputRef.current?.click();
   };
 
   const handleLogout = async () => {
@@ -138,125 +130,65 @@ const Profile = () => {
           <h1 className="text-2xl font-bold mb-4">My Profile</h1>
 
           {error && (
-            <Alert variant="destructive" className="mb-4">
-              <AlertCircle className="h-4 w-4" />
-              <AlertDescription>{error}</AlertDescription>
-            </Alert>
-          )}
-
-          {success && (
-            <Alert className="mb-4 bg-green-50 border-green-200">
-              <AlertDescription className="text-green-700">
-                {success}
-              </AlertDescription>
-            </Alert>
-          )}
-
-          <Card className="mb-4">
-            <CardHeader className="pb-2">
-              <CardTitle className="text-lg">Profile Information</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="flex flex-col items-center mb-4">
-                <div className="relative">
-                  <Avatar
-                    className="h-20 w-20 cursor-pointer"
-                    onClick={handleImageClick}
-                  >
-                    <AvatarImage src={user.profile_image} alt={user.name} />
-                    <AvatarFallback className="bg-primary/10 text-primary text-xl">
-                      {user.name
-                        .split(" ")
-                        .map((name) => name[0])
-                        .join("")
-                        .toUpperCase()}
-                    </AvatarFallback>
-                  </Avatar>
-                  <div
-                    className="absolute bottom-0 right-0 bg-primary text-white p-1 rounded-full cursor-pointer"
-                    onClick={handleImageClick}
-                  >
-                    <Camera className="h-4 w-4" />
-                  </div>
-                  <input
-                    type="file"
-                    ref={fileInputRef}
-                    className="hidden"
-                    accept="image/*"
-                    onChange={handleImageChange}
-                  />
-                </div>
-                {isEditing ? (
-                  <div className="w-full space-y-4 mt-4">
-                    <div className="space-y-2">
-                      <Label htmlFor="name">Name</Label>
-                      <div className="relative">
-                        <User className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-4 w-4" />
-                        <Input
-                          id="name"
-                          value={name}
-                          onChange={(e) => setName(e.target.value)}
-                          className="pl-10"
-                        />
-                      </div>
-                    </div>
-                    <div className="space-y-2">
-                      <Label htmlFor="email">Email</Label>
-                      <div className="relative">
-                        <Mail className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-4 w-4" />
-                        <Input
-                          id="email"
-                          type="email"
-                          value={email}
-                          onChange={(e) => setEmail(e.target.value)}
-                          className="pl-10"
-                        />
-                      </div>
-                    </div>
-                    <div className="space-y-2">
-                      <Label htmlFor="phone">Phone</Label>
-                      <div className="relative">
-                        <Phone className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-4 w-4" />
-                        <Input
-                          id="phone"
-                          type="tel"
-                          value={phone}
-                          onChange={(e) => setPhone(e.target.value)}
-                          className="pl-10"
-                        />
-                      </div>
-                    </div>
-                    <div className="flex justify-end space-x-2">
-                      <Button
-                        variant="outline"
-                        onClick={handleCancel}
-                        disabled={isLoading}
-                      >
-                        Cancel
-                      </Button>
-                      <Button onClick={handleSaveProfile} disabled={isLoading}>
-                        {isLoading ? "Saving..." : "Save"}
-                      </Button>
-                    </div>
-                  </div>
-                ) : (
-                  <div className="text-center">
-                    <h2 className="text-xl font-semibold mt-3">{user.name}</h2>
-                    <p className="text-gray-500">{user.email}</p>
-                    <p className="text-gray-500">{user.phone}</p>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      className="mt-2"
-                      onClick={() => setIsEditing(true)}
-                    >
-                      Edit Profile
-                    </Button>
-                  </div>
-                )}
+          <Alert variant="destructive" className="mb-4">
+            <AlertCircle className="h-4 w-4" />
+            <AlertDescription>{error}</AlertDescription>
+          </Alert>
+        )}
+        {success && (
+          <Alert className="mb-4 bg-green-50 border-green-200">
+            <AlertDescription className="text-green-700">{success}</AlertDescription>
+          </Alert>
+        )}
+        <Card className="mb-4">
+          <CardHeader>
+            <CardTitle className="text-lg">Profile Information</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="flex flex-col items-center mb-4">
+              <Avatar className="h-20 w-20 cursor-pointer" onClick={() => fileInputRef.current?.click()}>
+                <AvatarImage src={user?.image} alt={fullName} />
+                <AvatarFallback>{fullName.charAt(0)}</AvatarFallback>
+              </Avatar>
+              <div className="mt-2 cursor-pointer" onClick={() => fileInputRef.current?.click()}>
+                <Camera className="h-5 w-5 text-gray-500" />
               </div>
-            </CardContent>
-          </Card>
+              <input type="file" ref={fileInputRef} className="hidden" accept="image/*" onChange={handleImageChange} />
+            </div>
+            {isEditing ? (
+              <div className="space-y-4">
+                <div>
+                  <Label>Full Name</Label>
+                  <Input value={fullName} onChange={(e) => setFullName(e.target.value)} />
+                </div>
+                <div>
+                  <Label>Phone Number</Label>
+                  <Input value={phoneNumber} disabled />
+                </div>
+                <div>
+                  <Label>Location</Label>
+                  <Input value={location} onChange={(e) => setLocation(e.target.value)} />
+                </div>
+                <Button onClick={handleSaveProfile} disabled={isLoading}>{isLoading ? "Saving..." : "Save"}</Button>
+              </div>
+            ) : (
+              <div className="text-center">
+                <h2 className="text-xl font-semibold">{fullName}</h2>
+                <p className="text-gray-500"><Phone className="inline h-4 w-4" /> {phoneNumber}</p>
+                <p className="text-gray-500"><MapPin className="inline h-4 w-4" /> {location}</p>
+                <Button variant="outline" className="mt-2" onClick={() => setIsEditing(true)}>Edit Profile</Button>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+
+          <Button
+            variant="outline"
+            className="mt-4"
+            onClick={() => navigate("/admin/add-barber")}
+          >
+            Add Barber
+          </Button>
 
           <Card className="mb-4">
             <CardHeader className="pb-2">

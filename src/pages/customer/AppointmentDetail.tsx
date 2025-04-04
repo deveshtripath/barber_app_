@@ -169,7 +169,12 @@ const AppointmentDetail = () => {
                   </Avatar>
                   <div>
                     <h3 className="font-medium">{barber.name}</h3>
-                    <p className="text-sm text-gray-500">{barber.specialty}</p>
+                    {/* Render specialty if it exists */}
+                    {barber.specialty ? (
+                      <p className="text-sm text-gray-500">{barber.name}</p>
+                    ) : (
+                      <p className="text-sm text-gray-500">Specialty not available</p>
+                    )}
                   </div>
                 </div>
 
@@ -208,6 +213,7 @@ const AppointmentDetail = () => {
               </div>
             </CardContent>
           </Card>
+
 
           {/* Services */}
           <Card className="mb-6">

@@ -1,30 +1,39 @@
-import React from "react";
+import React, { useEffect, useState } from "react";
 import { Star } from "lucide-react";
-import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
-import { Button } from "@/components/ui/button";
-import { Card, CardContent } from "@/components/ui/card";
+import { Avatar, AvatarImage, AvatarFallback } from "../ui/avatar";
+import { Button } from "../ui/button";
+import { Card, CardContent } from "../ui/card";
+import { getBarbers } from "../../lib/firebase";
+import { Loader2 } from "lucide-react"; // Adding a loader spinner for better UX
 
-interface BarberProps {
+interface BarberAvailability {
+  date: string; // The date of availability
+  times: string[]; // List of available times
+}
+
+export interface Barber {
   id: string;
   name: string;
   rating: number;
-  specialty: string;
+  specialty: {
+    id: string;
+    name: string;
+    description: string;
+    time: number;  // in minutes
+    money: number; // price for the service
+  }[];
   imageUrl: string;
   availability: string;
-  onBookNow?: (id: string) => void;
-}
-
-interface FeaturedBarbersProps {
-  barbers?: BarberProps[];
-  onBookNow?: (id: string) => void;
-  title?: string;
+  phone: string;
+  location: string;
+  availableTimes?: BarberAvailability[]; // Optional availability times
 }
 
 const BarberCard = ({
   barber,
   onBookNow = () => {},
 }: {
-  barber: BarberProps;
+  barber: Barber;
   onBookNow?: (id: string) => void;
 }) => {
   return (
@@ -41,9 +50,19 @@ const BarberCard = ({
           <Star className="h-3 w-3 fill-yellow-400 text-yellow-400" />
           <span className="text-xs ml-1">{barber.rating.toFixed(1)}</span>
         </div>
-        <p className="text-xs text-gray-500 mb-2 text-center">
-          {barber.specialty}
-        </p>
+        
+        {/* Display the first specialty if available */}
+        {barber.specialty.length > 0 && (
+          <p className="text-xs text-gray-500 mb-2 text-center">
+            {barber.specialty[0].name} - ${barber.specialty[0].money}
+          </p>
+        )}
+
+        <div className="text-xs text-center text-gray-600 mb-2">
+          <p>{barber.location}</p>
+          <p>{barber.phone}</p>
+        </div>
+
         <Button
           variant="outline"
           size="sm"
@@ -58,56 +77,57 @@ const BarberCard = ({
 };
 
 const FeaturedBarbers = ({
-  barbers = [
-    {
-      id: "1",
-      name: "James Wilson",
-      rating: 4.8,
-      specialty: "Classic Cuts",
-      imageUrl: "https://api.dicebear.com/7.x/avataaars/svg?seed=james",
-      availability: "Today",
-    },
-    {
-      id: "2",
-      name: "Maria Garcia",
-      rating: 4.9,
-      specialty: "Fades & Designs",
-      imageUrl: "https://api.dicebear.com/7.x/avataaars/svg?seed=maria",
-      availability: "Tomorrow",
-    },
-    {
-      id: "3",
-      name: "David Chen",
-      rating: 4.7,
-      specialty: "Beard Styling",
-      imageUrl: "https://api.dicebear.com/7.x/avataaars/svg?seed=david",
-      availability: "Today",
-    },
-    {
-      id: "4",
-      name: "Sarah Johnson",
-      rating: 4.6,
-      specialty: "Color & Highlights",
-      imageUrl: "https://api.dicebear.com/7.x/avataaars/svg?seed=sarah",
-      availability: "Today",
-    },
-    {
-      id: "5",
-      name: "Michael Brown",
-      rating: 4.5,
-      specialty: "Trendy Styles",
-      imageUrl: "https://api.dicebear.com/7.x/avataaars/svg?seed=michael",
-      availability: "Tomorrow",
-    },
-  ],
   onBookNow = () => {},
+  onViewAll = () => {},
   title = "Featured Barbers",
-}: FeaturedBarbersProps) => {
+}: {
+  onBookNow?: (id: string) => void;
+  onViewAll?: () => void;
+  title?: string;
+}) => {
+  const [barbers, setBarbers] = useState<Barber[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    const fetchBarbers = async () => {
+      try {
+        const barberList = await getBarbers();
+        setBarbers(barberList);
+      } catch (err: any) {
+        setError(err.message || "Failed to load barbers");
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchBarbers();
+  }, []);
+
+  if (loading)
+    return (
+      <div className="flex justify-center items-center p-4">
+        <Loader2 className="animate-spin h-8 w-8 text-blue-500" />
+        <span className="ml-2 text-gray-500">Loading barbers...</span>
+      </div>
+    );
+  if (error)
+    return (
+      <div className="text-center text-red-500 p-4">
+        <p>Error: {error}</p>
+      </div>
+    );
+
   return (
     <div className="w-full bg-gray-50 p-4">
       <div className="flex justify-between items-center mb-3">
         <h2 className="text-lg font-semibold">{title}</h2>
-        <Button variant="ghost" size="sm" className="text-xs text-blue-600">
+        <Button
+          variant="ghost"
+          size="sm"
+          className="text-xs text-blue-600"
+          onClick={onViewAll} // Call onViewAll function on button click
+        >
           View All
         </Button>
       </div>

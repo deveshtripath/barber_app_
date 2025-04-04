@@ -1,14 +1,14 @@
 import React, { useState, useEffect } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
-import Header from "@/components/customer/Header";
-import BottomNavigation from "@/components/customer/BottomNavigation";
-import { useData } from "@/lib/data";
-import { useAuth } from "@/lib/auth";
-import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Calendar } from "@/components/ui/calendar";
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { Badge } from "@/components/ui/badge";
+import Header from "../../components/customer/Header"; // Corrected import path
+import BottomNavigation from "../../components/customer/BottomNavigation";
+import { useData } from "../../lib/data";
+import { useAuth } from "../../lib/auth";
+import { Button } from "../../components/ui/button";
+import { Card, CardContent, CardHeader, CardTitle } from "../../components/ui/card";
+import { Calendar } from "../../components/ui/calendar";
+import { Avatar, AvatarFallback, AvatarImage } from "../../components/ui/avatar";
+import { Badge } from "../../components/ui/badge";
 import { format } from "date-fns";
 import {
   Calendar as CalendarIcon,
@@ -17,13 +17,15 @@ import {
   Check,
   AlertCircle,
 } from "lucide-react";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "../../components/ui/tabs";
+import { Alert, AlertDescription } from "../../components/ui/alert";
+import { getBarbers, getServicesByBarberId } from "../../lib/firebase"; // Import the updated getBarbers function
+import { BarberProps } from "../../types/barber_updated.types"; // Import BarberProps from the updated file
 
-const AppointmentBooking = () => {
+const AppointmentBookingTemp = () => {
+  const [showServices, setShowServices] = useState(false); // State to control service visibility
   const { user } = useAuth();
-  const { barbers, services, createAppointment, getAvailableTimeSlots } =
-    useData();
+  const { services, createAppointment } = useData();
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const barberId = searchParams.get("barber") || "";
@@ -34,39 +36,85 @@ const AppointmentBooking = () => {
   );
   const [selectedTime, setSelectedTime] = useState<string>("");
   const [selectedBarber, setSelectedBarber] = useState<string>(barberId);
-  const [selectedServices, setSelectedServices] = useState<string[]>(
-    serviceId ? [serviceId] : [],
-  );
+  const [selectedServices, setSelectedServices] = useState<string[]>(serviceId ? [serviceId] : []);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [availableTimeSlots, setAvailableTimeSlots] = useState<string[]>([]);
+  const [availableTimeSlots, setAvailableTimeSlots] = useState<string[]>([
+    "10:00 AM",
+    "10:30 AM",
+    "11:00 AM",
+    "11:30 AM",
+    "12:00 PM",
+    "1:00 PM",
+    "1:30 PM",
+    "2:00 PM",
+  ]); // Added dummy time slots
+  const [barbers, setBarbers] = useState<BarberProps[]>([]); // State to hold barbers
+  const [filteredServices, setFilteredServices] = useState([]); // State to hold filtered services
+  const [barberServices, setBarberServices] = useState<any[]>([]); // Holds the services for the selected barber
+  const [showServicesTab, setShowServicesTab] = useState<boolean>(false); // Control visibility of services tab
+
+  // Fetch barbers
+  useEffect(() => {
+    const fetchBarbers = async () => {
+      try {
+        const barberList = await getBarbers(); // Ensure this returns the correct structure
+        const formattedBarbers = barberList.map(barber => ({
+          ...barber,
+          availability_status: barber.availability, // Ensure all required properties are present
+          experience: barber.experience || 0, // Default value if not present
+          shop_name: barber.shop_name || "Unknown", // Default value if not present
+          services_offered: barber.services_offered || [], // Default value if not present
+        }));
+        setBarbers(formattedBarbers || []); // Default to an empty array if undefined
+        console.log("Fetched barber list:", barberList); // Debugging
+      } catch (err: any) {
+        setError(err.message || "Failed to load barbers");
+      }
+    };
+    fetchBarbers();
+  }, []);
+
+  useEffect(() => {
+    if (selectedBarber) {
+      const fetchBarberServices = async () => {
+        try {
+          const services = await getServicesByBarberId(selectedBarber); // Fetch services by barber ID
+          setBarberServices(services); // Update the state with the fetched services
+        } catch (err) {
+          console.error("Error fetching barber services:", err);
+        }
+      };
+      fetchBarberServices();
+    }
+  }, [selectedBarber]);
+
+  // Fetch services based on selected barber
+  useEffect(() => {
+    if (selectedBarber) {
+      const barber = barbers.find(b => b.id === selectedBarber);
+      if (barber) {
+        const servicesForBarber = barber.services_offered || []; // Fetch services from barber's data
+        setFilteredServices(servicesForBarber);
+        setShowServices(true); // Show services if a barber is selected
+      }
+    } else {
+      setFilteredServices([]); // Reset to no services if no barber is selected
+      setShowServices(false); // Hide services if no barber is selected
+    }
+  }, [selectedBarber, barbers]);
 
   // Calculate total price
   const totalPrice = selectedServices.reduce((total, serviceId) => {
-    const service = services.find((s) => s.id === serviceId);
+    const service = filteredServices.find((s) => s.id === serviceId);
     return total + (service?.price || 0);
   }, 0);
 
   // Calculate total duration
   const totalDuration = selectedServices.reduce((total, serviceId) => {
-    const service = services.find((s) => s.id === serviceId);
+    const service = filteredServices.find((s) => s.id === serviceId);
     return total + (service?.duration || 0);
   }, 0);
-
-  // Update available time slots when date or barber changes
-  useEffect(() => {
-    if (selectedDate && selectedBarber) {
-      const slots = getAvailableTimeSlots(selectedBarber, selectedDate);
-      setAvailableTimeSlots(slots);
-
-      // Clear selected time if it's no longer available
-      if (selectedTime && !slots.includes(selectedTime)) {
-        setSelectedTime("");
-      }
-    } else {
-      setAvailableTimeSlots([]);
-    }
-  }, [selectedDate, selectedBarber, getAvailableTimeSlots]);
 
   const handleServiceToggle = (serviceId: string) => {
     setSelectedServices((prev) =>
@@ -75,7 +123,7 @@ const AppointmentBooking = () => {
         : [...prev, serviceId],
     );
   };
-
+  
   const handleBookAppointment = async () => {
     if (
       !user ||
@@ -88,24 +136,28 @@ const AppointmentBooking = () => {
       return;
     }
 
+    console.log("Selected Services:", selectedServices[0]); // Debugging line
+
     setError(null);
     setIsLoading(true);
     try {
       // Format date for display
       const formattedDate = format(selectedDate, "yyyy-MM-dd");
 
+      // console.log(user);
+
       // Create appointment
-      await createAppointment({
-        customerId: user.id,
+      const appointmentId = await createAppointment({
+        customerId: user.phoneNumber,
         barberId: selectedBarber,
-        serviceIds: selectedServices,
+        serviceIds: selectedServices[0],
         date: formattedDate,
         time: selectedTime,
         status: "pending",
         totalPrice: totalPrice,
       });
 
-      // Navigate to appointments page
+      // Navigate to appointments page with the appointment ID
       navigate("/customer/appointments");
     } catch (error: any) {
       console.error("Error booking appointment:", error);
@@ -134,58 +186,10 @@ const AppointmentBooking = () => {
 
           <Tabs defaultValue="services" className="mb-6">
             <TabsList className="w-full grid grid-cols-3">
-              <TabsTrigger value="services">Services</TabsTrigger>
               <TabsTrigger value="barber">Barber</TabsTrigger>
+              <TabsTrigger value="services" disabled={!showServices}>Services</TabsTrigger>
               <TabsTrigger value="datetime">Date & Time</TabsTrigger>
             </TabsList>
-
-            {/* Services Tab */}
-            <TabsContent value="services">
-              <Card>
-                <CardHeader>
-                  <CardTitle className="text-lg">Select Services</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <div className="space-y-3">
-                    {services.map((service) => (
-                      <div
-                        key={service.id}
-                        className={`p-3 border rounded-lg cursor-pointer transition-colors ${selectedServices.includes(service.id) ? "border-primary bg-primary/5" : "border-gray-200"}`}
-                        onClick={() => handleServiceToggle(service.id)}
-                      >
-                        <div className="flex justify-between items-center">
-                          <div>
-                            <h3 className="font-medium">{service.name}</h3>
-                            <p className="text-sm text-gray-500">
-                              {service.description}
-                            </p>
-                            <div className="flex items-center space-x-3 mt-1">
-                              <div className="flex items-center text-gray-600">
-                                <Clock className="h-3 w-3 mr-1" />
-                                <span className="text-xs">
-                                  {service.duration} min
-                                </span>
-                              </div>
-                              <div className="flex items-center text-gray-600">
-                                <DollarSign className="h-3 w-3 mr-1" />
-                                <span className="text-xs">
-                                  ${service.price}
-                                </span>
-                              </div>
-                            </div>
-                          </div>
-                          {selectedServices.includes(service.id) && (
-                            <div className="bg-primary text-white p-1 rounded-full">
-                              <Check className="h-4 w-4" />
-                            </div>
-                          )}
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </CardContent>
-              </Card>
-            </TabsContent>
 
             {/* Barber Tab */}
             <TabsContent value="barber">
@@ -199,27 +203,37 @@ const AppointmentBooking = () => {
                       {barbers.map((barber) => (
                         <div
                           key={barber.id}
-                          className={`p-3 border rounded-lg cursor-pointer transition-colors ${selectedBarber === barber.id ? "border-primary bg-primary/5" : "border-gray-200"}`}
+                          className={`p-3 border rounded-lg cursor-pointer transition-colors ${
+                            selectedBarber === barber.id
+                              ? "border-primary bg-primary/5"
+                              : "border-gray-200"
+                          }`}
                           onClick={() => setSelectedBarber(barber.id)}
                         >
                           <div className="flex items-center space-x-3">
                             <Avatar>
-                              <AvatarImage
-                                src={barber.imageUrl}
-                                alt={barber.name}
-                              />
+                              <AvatarImage src={barber.imageUrl} alt={barber.name} />
                               <AvatarFallback>
                                 {barber.name.substring(0, 2).toUpperCase()}
                               </AvatarFallback>
                             </Avatar>
                             <div>
                               <h3 className="font-medium">{barber.name}</h3>
-                              <p className="text-sm text-gray-500">
-                                {barber.specialty}
-                              </p>
+                              {barber.specialties && Array.isArray(barber.specialties) ? (
+                                barber.specialties.map((spec) => (
+                                  <p key={spec.id}>{spec.name}</p>
+                                ))
+                              ) : (
+                                <p>No specialties available for this barber.</p>
+                              )}
                               <div className="flex items-center mt-1">
-                                <Badge variant="outline" className="text-xs">
-                                  {barber.availability}
+                                <Badge
+                                  variant="outline"
+                                  className={`text-xs ${
+                                    barber.availability_status ? "text-green-500" : "text-red-500"
+                                  }`}
+                                >
+                                  {barber.availability_status ? "Available" : "Unavailable"}
                                 </Badge>
                               </div>
                             </div>
@@ -230,14 +244,60 @@ const AppointmentBooking = () => {
                   ) : (
                     <div className="p-4 text-center text-gray-500">
                       <AlertCircle className="h-8 w-8 mx-auto mb-2 text-gray-400" />
-                      <p>No barbers are currently available.</p>
-                      <p className="text-sm mt-1">Please check back later.</p>
+                      <p>No barbers available.</p>
                     </div>
                   )}
                 </CardContent>
               </Card>
             </TabsContent>
 
+            {/* Services Tab */}
+            {selectedBarber && barberServices.length > 0 && (
+              <TabsContent value="services">
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="text-lg">Select Services</CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="space-y-3">
+                      {barberServices.map((service) => (
+                        <div
+                          key={service.name || `${service.name}-${service.duration}`}  // Ensure unique key by combining properties if id is missing or duplicate
+                          className={`p-3 border rounded-lg cursor-pointer transition-colors ${
+                            selectedServices.includes(service.id)
+                              ? "border-primary bg-primary/5"
+                              : "border-gray-200"
+                          }`}
+                          onClick={() => handleServiceToggle(service.id)}
+                        >
+                          <div className="flex justify-between items-center">
+                            <div>
+                              <h3 className="font-medium">{service.name}</h3>
+                              <p className="text-sm text-gray-500">{service.description}</p>
+                              <div className="flex items-center space-x-3 mt-1">
+                                <div className="flex items-center text-gray-600">
+                                  <Clock className="h-3 w-3 mr-1" />
+                                  <span className="text-xs">{service.duration} min</span>
+                                </div>
+                                <div className="flex items-center text-gray-600">
+                                  <DollarSign className="h-3 w-3 mr-1" />
+                                  <span className="text-xs">${service.money}</span>
+                                </div>
+                              </div>
+                            </div>
+                            {selectedServices.includes(service.id) && (
+                              <div className="bg-primary text-white p-1 rounded-full">
+                                <Check className="h-4 w-4" />
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </CardContent>
+                </Card>
+              </TabsContent>
+            )}
             {/* Date & Time Tab */}
             <TabsContent value="datetime">
               <Card>
@@ -308,7 +368,7 @@ const AppointmentBooking = () => {
                   <span className="font-medium">
                     {selectedServices.length > 0
                       ? selectedServices
-                          .map((id) => services.find((s) => s.id === id)?.name)
+                          .map((id) => filteredServices.find((s) => s.id === id)?.name)
                           .join(", ")
                       : "None selected"}
                   </span>
@@ -369,4 +429,4 @@ const AppointmentBooking = () => {
   );
 };
 
-export default AppointmentBooking;
+export default AppointmentBookingTemp;
